@@ -1,2 +1,18 @@
 # bsky-seg-topics
-Projeto de segmentação e análise de tópicos em postagens no Bluesky usando PySpark e Databricks
+
+O Bluesky é uma plataforma de rede social no formato microblog que surgiu em 2021, criada como prova de conceito para apresentar a ideia de rede social descentralizada, onde os perfis de usuários estão hospedados em servidores que não são necessariamente da empresa dona da rede social. Por ter um formato de uso extremamente parecido com o antigo Twitter, o Bluesky vem atraindo usuários de diferentes nacionalidades. Em janeiro de 2025, a plataforma atingiu os 30 milhões de usuários. O possível crescimento acaba marcando abertura a exploração de público dentro da rede social através de produtores de conteúdo, marcas e publicitários que, mesmo com a recusa do Bluesky na inserção de anúncios nativos, podem investir em engajar o público da rede.
+
+Dentro desse contexto, é interessante observar como se comporta o fluxo de maior evidência dentro da plataforma, ato que pode trazer uma analise exploratória das tendencias a se apostar como alvo de publicidade uma vez que o crescimento de Bluesky se mostra constante. Os meses finais de 2024 se mostrou um periodo de grande evidência e atividade dentro da rede, período em que foi possível constatar uma estabilização de usuários, após a volta do antigo Twitter em outubro do mesmo ano. Dentro de um contexto publicitário, os meses finais do ano fazem parte de um período crucial, devido às festas e férias escolares ou universitárias. Sendo assim, a observação de posts em evidencia dentro da plataforma nesse período é uma aposta consistente no objetivo adotado.
+
+## Coleta de Dados
+O bluesky disponibiliza de forma aberta uma biblioteca para python atproto, que fornece interface de cliente para a API da rede social, através do AT Protocol. Com ela é possível realizar acesso a uma conta de usuário e realizar ações de leitura e escrita dentro do perfil, além de gerenciamento de perfil.
+
+A partir do uso dessa API é possivel coletar posts de um feed determinado pelo cliente, podendo ser o feed da conta do usuário cliente ou o feed principal com posts populares, denominado What's Hot. O limite de coleta por requisição é de 100 publicações e não existe limite de requisições.
+
+Sendo assim, considerando o contexto temporal e as características da API, a coleta de posts foi distribuída em torno de 15 dias, com a realização da coleta de 200 posts do feed What's Hot por hora a cada dia. Essa coleta foi orquestrada via função Lambda da AWS e os posts armazenados em formato csv para cada requisição.
+
+## Datalake de Posts
+
+
+
+
