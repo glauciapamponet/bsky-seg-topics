@@ -12,7 +12,7 @@ A partir do uso dessa API é possivel coletar posts de um feed determinado pelo 
 Sendo assim, considerando o contexto temporal e as características da API, a coleta de posts foi distribuída em torno de 15 dias, com a realização da coleta de 200 posts do feed What's Hot por hora a cada dia. Essa coleta foi orquestrada via função Lambda da AWS e os posts armazenados em formato csv para cada requisição.
 
 ## Datalake de Posts
-![alt text](Assets\datalake.png)
+![alt text](Assets/datalake.png)
 
 A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entre os dias 15 e 31 de dezembro de 2024. Através de um trigger em função Lambda foi possível coletar os posts a cada hora dos 15 dias, na tentativa de amenizar duplicatas considerando os posts em maior evidência. 
 
