@@ -22,7 +22,7 @@ Sendo assim, considerando o contexto temporal e as características da API, a co
 | reply_count  | Integer    | Quantidade de respostas |
 
 ## Datalake de Posts
-![alt text](Assets\datalake.png)
+![alt text](Assets/datalake.png)
 
 A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entre os dias 15 e 31 de dezembro de 2024. Através de um trigger em função Lambda foi possível coletar os posts a cada hora dos 15 dias, na tentativa de amenizar duplicatas considerando os posts em maior evidência. 
 
