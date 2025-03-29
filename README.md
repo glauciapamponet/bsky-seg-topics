@@ -11,12 +11,22 @@ A partir do uso dessa API é possivel coletar posts de um feed determinado pelo 
 
 Sendo assim, considerando o contexto temporal e as características da API, a coleta de posts foi distribuída em torno de 15 dias, com a realização da coleta de 200 posts do feed What's Hot por hora a cada dia. Essa coleta foi orquestrada via função Lambda da AWS e os posts armazenados em formato csv para cada requisição.
 
+| Atributo   | Tipo | Descrição      |
+|:------ |:----: |:------:      |
+| author  | String    | Usuário autor do post  |
+| text    | String    | Texto do post |
+| created_at  | Timestamp    | Horário de postagem |
+| like_count  | Integer    | Quantidade de likes |
+| repost_count  | Integer    | Quantidade de repostagens |
+| quote_count  | Integer    | Quantidade de citações |
+| reply_count  | Integer    | Quantidade de respostas |
+
 ## Datalake de Posts
 ![alt text](Assets\datalake.png)
 
 A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entre os dias 15 e 31 de dezembro de 2024. Através de um trigger em função Lambda foi possível coletar os posts a cada hora dos 15 dias, na tentativa de amenizar duplicatas considerando os posts em maior evidência. 
 
-Um Bucket S3 foi disponibilizado como datalake inicialmente recebendo os arquivos csv gerados pelo Lambda que em seguida passaram pela orquestração de Jobs do AWS Glue para que ocorresse a disposiçao de arquitetura Medallion. 
+Um Bucket S3 foi disponibilizado como datalake inicialmente recebendo os arquivos csv gerados pelo Lambda que em seguida passaram pela orquestração de Jobs do AWS Glue para que ocorresse a disposiçao de arquitetura Medallion, com uma rotina de carga D-1. 
 
 A camada Bronze foi disponibilizada de forma particionada, enquanto a camada Silver foi disponibilizada com o conteúdo dos posts limpos e separados das informações de dimensão. A camada Gold foi disponibilizada com o conteúdo vetorizado através de um modelo Sentence Tranformer (all-MiniLM-L6-v2) para receber os pipelines de Machine Learning.
 
