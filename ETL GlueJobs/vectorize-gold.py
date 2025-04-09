@@ -1,8 +1,4 @@
 print("start session")
-import time
-import json
-import yake
-import numpy as np
 from pyspark.sql.types import *
 from datetime import timedelta
 from pyspark.sql.functions import col, min, max, udf, lit
@@ -32,17 +28,6 @@ posts_silver = f"{silver_path}/fato/posts/"
 posts_gold = f"{gold_path}/fato/posts"
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
-extractor = yake.KeywordExtractor(lan="en",          
-                                  n=3,               
-                                  dedupLim=0.85,      
-                                  dedupFunc='seqm',  
-                                  windowsSize=2,     
-                                  top=15)
-
-def yakinizer(text):
-    key_words = extractor.extract_keywords(text)
-    filtered_words = [kw[0] for kw in key_words if kw[1] < 0.1]
-    return ' '.join(filtered_words)
 
 def encode(text):
     embed = model.encode(text, convert_to_numpy=True)
@@ -144,11 +129,9 @@ df_gold = df_silver.join(df_time_silver, "SK_time", "inner")\
     .filter(col("created_at") > lit(max_date_gold))\
     .drop("created_at")
 
-udf_yake = udf(yakinizer, StringType())
 udf_vector = udf(encode, ArrayType(FloatType()))
 
 df_gold = df_gold\
-    .withColumn("yaked", udf_yake(col("text_cleaned"))).drop(col("text_cleaned"))\
     .withColumn("embedding", udf_vector(col("yaked"))).drop(col("yaked"))
 
 # Upload camada gold bucket S3
