@@ -4,6 +4,7 @@ import unicodedata
 import shutil
 import string
 import enchant
+import yake
 import boto3
 import numpy as np
 import wordninja
@@ -105,6 +106,20 @@ def separate_words(text):
     text = " ".join(separated_text)
     return text
 
+extractor = yake.KeywordExtractor(lan="en",          
+                                  n=3,               
+                                  dedupLim=0.85,      
+                                  dedupFunc='seqm',  
+                                  windowsSize=2,     
+                                  top=15)
+def yakinizer(text):
+    seen = set()
+    key_words = extractor.extract_keywords(text)
+    filtered_words = ' '.join([kw for kw, sc in key_words if sc < 0.05])
+    filtered_words = filtered_words.split(' ')
+    final_words = [x for x in filtered_words if not (x in seen or seen.add(x))]
+    return ' '.join(final_words)
+
 def get_data_silver(schema, path, atribute):
     try: 
         df_silver = spark.read.format("parquet") \
@@ -161,13 +176,15 @@ udf_clean = udf(cleaning_posts, StringType())
 udf_stop = udf(remove_stopwords, StringType())
 udf_normal = udf(normalizing_text, StringType())
 udf_separate = udf(separate_words, StringType())
+udf_yake = udf(yakinizer, StringType())
 
 df_silver = df_silver.withColumn("cleaned", udf_clean(F.col("text"))).drop(F.col("text"))\
     .withColumn("stopped", udf_stop(F.col("cleaned"))).drop(F.col("cleaned"))\
     .withColumn("normal", udf_stop(F.col("stopped"))).drop(F.col("stopped"))\
-    .filter(F.trim(F.col("normal")) != "")\
     .withColumn("text_cleaned", udf_separate(F.col("normal"))).drop(F.col("normal"))\
-    .dropna(subset=["text_cleaned"])\
+    .withColumn("yaked", udf_yake(F.col("text_cleaned"))).drop(F.col("text_cleaned"))\
+    .filter(F.trim(F.col("yaked")) != "")\
+    .dropna(subset=["yaked"])\
     
 schema_time = StructType([
     StructField("MES", IntegerType(), True),
