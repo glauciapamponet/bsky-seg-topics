@@ -26,12 +26,14 @@ A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entr
 
 Um Bucket S3 foi disponibilizado como datalake inicialmente recebendo os arquivos csv gerados pelo Lambda que em seguida passaram pela orquestração de Jobs do AWS Glue para que ocorresse a disposiçao de arquitetura Medallion, com uma rotina de carga D-1. 
 
-**Camada Bronze:** Disponibilizada de forma particionada, teve como objetivo agregar todo o conjunto de dados em um repositório só, transicionando os dados do formato de coleta(.csv) para parquet.
-**Camada Silver:** Disponibilizada com o conteúdo dos posts limpos e separados das informações de dimensão. O maior trabalho de limpeza e refinamento em PLN foi realizado aqui, garantindo que o conjunto pudesse ser usado para análise exploratória tardiamente. Além da limpeza de stopwrods, caracteres especiais e valores numéricos, foi realizado um refinamento usando o extrator de palavras chave não supervisionado ![YAKE](https://pypi.org/project/yake/), possibilitando maior relevância no conteúdo.
-**Camada Gold:** Disponibilizada com o conteúdo vetorizado através de um modelo Sentence Tranformer (all-MiniLM-L6-v2) para receber os pipelines de Machine Learning.
+**Camada Bronze:** Disponibilizada de forma particionada, teve como objetivo agregar todo o conjunto de dados em um repositório só, transicionando os dados do formato de coleta(.csv) para parquet.<br>**Camada Silver:** Disponibilizada com o conteúdo dos posts limpos e separados das informações de dimensão. O maior trabalho de limpeza e refinamento em PLN foi realizado aqui, garantindo que o conjunto pudesse ser usado para análise exploratória tardiamente. Além da limpeza de stopwrods, caracteres especiais e valores numéricos, foi realizado um refinamento usando o extrator de palavras chave não supervisionado [YAKE](https://pypi.org/project/yake/), possibilitando maior relevância no conteúdo.<br>**Camada Gold:** Disponibilizada com o conteúdo vetorizado através de um modelo Sentence Tranformer ([all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)) para receber os pipelines de Machine Learning.
 
 ## Análise Exploratória
 
-## Pipelines de ML
+## Clustering
+A ideia para o projeto é encontrar estratégias de segmentação que possam trazer uma apresentação de tópicos dentro dos dados coletados. Para isso, foram considerados algoritmos de clustering de dados. Nesse estudo foram escolhidos três modelos que passaram por avaliação com permutação de hiperparâmetros (Grid Search) e em seguida produziram resultados para uma matriz de coocorrência com seus melhores resultados avulsos.
+Para os três algoritmos testados foram disponibilizados os dados vetorizados do DataLake e transformados de forma escalar em dois formatos: 
+- **RobustScaler**: dimensionamento dos embeddings de acordo com seu IQR (intervalo inter-quartil). Útil em padronizar dados com outliers ou ruídos.
+- **MinMaxScaler**: dimensionamento dos embeddings no intervalo [0,1] de forma padrão, usando valores maximo e mínimo. 
 
-## Análise de Resultados
+Entre os algoritmos avaliados estão **KMeans**, **DBSCAN** e **HDBSCAN**
