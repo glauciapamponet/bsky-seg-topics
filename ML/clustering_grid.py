@@ -147,6 +147,8 @@ for distance, sample, size, vec in combinations:
     i+=1
         
 #%%
+# Grid Search KMeans
+
 n_clusters = [3, 4, 5]
 n_inits = [10, 30, 50, 80]
 inits = ['k-means++', 'random']
