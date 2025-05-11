@@ -20,7 +20,7 @@ Sendo assim, considerando o contexto temporal e as características da API, a co
 | reply_count  | Integer    | Quantidade de respostas |
 
 ## Datalake de Posts
-![alt text](Assets/datalake.png)
+![Esquema de Datalake](Assets/datalake.png)
 
 A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entre os dias 15 e 31 de dezembro de 2024. Através de um trigger em função Lambda foi possível coletar os posts a cada hora dos 15 dias, na tentativa de amenizar duplicatas considerando os posts em maior evidência. 
 
@@ -29,6 +29,20 @@ Um Bucket S3 foi disponibilizado como datalake inicialmente recebendo os arquivo
 **Camada Bronze:** Disponibilizada de forma particionada, teve como objetivo agregar todo o conjunto de dados em um repositório só, transicionando os dados do formato de coleta(.csv) para parquet.<br>**Camada Silver:** Disponibilizada com o conteúdo dos posts limpos e separados das informações de dimensão. O maior trabalho de limpeza e refinamento em PLN foi realizado aqui, garantindo que o conjunto pudesse ser usado para análise exploratória tardiamente. Além da limpeza de stopwrods, caracteres especiais e valores numéricos, foi realizado um refinamento usando o extrator de palavras chave não supervisionado [YAKE](https://pypi.org/project/yake/), possibilitando maior relevância no conteúdo.<br>**Camada Gold:** Disponibilizada com o conteúdo vetorizado através de um modelo Sentence Tranformer ([all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)) para receber os pipelines de Machine Learning.
 
 ## Análise Exploratória
+O período de 15 de coleta de postagens do Bluesky envolvendo a API que recolhe registros do feed "What's Hot" levantou a cada hora de cada dia um montante de 100 posts via trigger de Lambda Function. A atividade totalizou uma coleta de aproximadamente 36.000 registros de posts, desconsiderando os posts que estavam em alta no momento da coleta, mas que não pertenciam a uma data no intervalo escolhido. Desse total, após remoção de duplicatas, limpeza de stopwords e extração de palavras-chave (resultando em registros vazios ou nulos onde se encontravam repetições da mesma palavra ou apenas citações de outros posts), esse número decaiu para 18.425 posts.
+
+![Wordcloud e Frequência Top 20](Assets/wordcloud-barplot.png)
+
+Foi possível perceber que o período usado para a extração de posts influenciou completamente as palavras mais populares na rede daquele momento, o que era de se esperar. Existe uma evidente diferença entre a palavra mais citada no dataset, relacionada ao natal e a palavra menos citada que provavelmente provém de tópico político.
+
+![Análise Temporal](Assets/plot_temporal.png)
+
+A distribuição da quantidade de posts conforme os dias do intervalo se manteve com poucas alterações mesmo após a limpeza, levando em fator a soma de posts por todos os dias do período. <br>Já a distribuição agrupada por dias da semana mostrou uma queda perceptível na sexta-feira (Friday) acompanhada de um alto range do intervalo de confiança. Observando o calendário correspondente ao período, nota-se que o espaço de 16 dias da coleta contemplou 3 vezes os dias Domingo (Sunday), Segunda-feira(Monday) e Terça-feira(Tuesday) equanto que Quarta-feira(Wednesdey), Quinta-feira(Thirsday), Sexta-feira(Friday) e Sábado(Saturday), rotacionaram uma vez a menos. O intervalo de confiança discrepante em Friday pode sugerir um recuo na criação de posts evidentes em uma das 2 datas que contemplam o dia. <br>A distribuição horária nas postagens mostrou variabilidade explicável, considerando que a coleta de horário se dá em hora local dos posts, sendo maior parte deles dentro de fusos dos Estados Unidos. O trecho com menor contagem na faixa de horario da madrugada consolida a falta de atividade de usuários por sono, além dos picos relativos e absolutos consolidarem os horarios de almoço e fim do dia como periodos de maior atividade. 
+
+### Observando palavras de maior frequência
+![Correlação e Cobertura de Palavras](Assets/cobertura.png)
+
+O vocabulário do conjunto de dados reuniu em todo aproximadamente 23.385 palavras citadas e adotadas como palavras chave ou de evidência para identificação. Consultando arbitrariamente as palavras mais usadas com frequencia em posts acima de 150, foi extraído um total de 97 palavras mais citadas, representando 0,4% de todo o vocabulário. A cobertura, que determina quantos posts do dataset possuem ao menos uma das 97 mais citadas apresenta valores abaixo dos 20%, o que esclarece a possivel discrepância entre a presença de tópicos mais definidos e a presença de tópicos mais individuais, além de uma alta variabilidade de vocabulário de menor frequência. <br>A rede de relações entre essas 97 palavras mais uma vez endossa a presença do feriado nas conversas da plataforma no período, uma vez que ao centro do grafo, onde vemos palavras relacionadas às festas, está a parte mais pesada de vértices. Ao redor, é possivel encontrar relações a assuntos políticos ('public' <> 'health'), artisticos ('nature' <> 'photography') e diversos ('social' <> 'media').
 
 ## Clustering
 A ideia para o projeto é encontrar estratégias de segmentação que possam trazer uma apresentação de tópicos dentro dos dados coletados. Para isso, foram considerados algoritmos de clustering de dados. Nesse estudo foram escolhidos três modelos que passaram por avaliação com permutação de hiperparâmetros (Grid Search) e em seguida produziram resultados para uma matriz de coocorrência com seus melhores resultados avulsos.
