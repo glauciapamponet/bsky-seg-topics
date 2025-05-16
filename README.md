@@ -50,4 +50,9 @@ Para os três algoritmos testados foram disponibilizados os dados vetorizados do
 - **RobustScaler**: dimensionamento dos embeddings de acordo com seu IQR (intervalo inter-quartil). Útil em padronizar dados com outliers ou ruídos.
 - **MinMaxScaler**: dimensionamento dos embeddings no intervalo [0,1] de forma padrão, usando valores maximo e mínimo. 
 
-Entre os algoritmos avaliados estão **KMeans**, **DBSCAN** e **HDBSCAN**
+Entre os algoritmos avaliados estão **KMeans**, **DBSCAN** e **HDBSCAN**.
+
+Usando o Mlflow, inicialmente foi realizada uma avaliação para cada tipo de modelo através de **Grid Search**, contando como estimativa de alguns paramêtros a observação do comportamento dos dados aos modelos, como no caso do Kmeans, onde foi utilizado o Elbow Method (Método do Cotovelo) para determinar em quais valores de K a inércia do modelo sofreria alteração. O método também foi usado para estipular valores para DBSCAN observando o comportamento do valor de epsilon (raio de área mínima para formação de um cluster) em relação aos dados.<br>Ao todo, foram feitas mais de 300 execuções nos experimentos destinados a cada tipo de modelo para definir os melhores parametros para o Clustering Ensemble. Nos experimentos do Mlflow, foram registrados os hiperparâmetros de cada execução, bem como as métricas de avaliação básicas: **silhoute, davies bouldin e calinski harabasz**.
+![As melhores execuções de cada experimento](Assets/mlflow_comparing.png)
+
+De forma geral, a medição das métricas baixas permaneceu abaixo do satisfatório para quase todas as execuções dos experimentos. A estimativa é de que a formação de clusters no conjunto de dados se dá com áreas muito pequenas, o que abre potencial para uma quantidade elevada e fora de possibilidade de observação de clusters, o que aumentou o nível de ruído nos hiperparâmetros mais adequados. No algoritmo que não apresenta formação de clusters por área, o Kmeans, a quantidade K que demonstrou melhor desempenho foi K=9.
