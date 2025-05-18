@@ -56,3 +56,7 @@ Usando o Mlflow, inicialmente foi realizada uma avaliação para cada tipo de mo
 ![As melhores execuções de cada experimento](Assets/mlflow_comparing.png)
 
 De forma geral, a medição das métricas baixas permaneceu abaixo do satisfatório para quase todas as execuções dos experimentos. A estimativa é de que a formação de clusters no conjunto de dados se dá com áreas muito pequenas, o que abre potencial para uma quantidade elevada e fora de possibilidade de observação de clusters, o que aumentou o nível de ruído nos hiperparâmetros mais adequados. No algoritmo que não apresenta formação de clusters por área, o Kmeans, a quantidade K que demonstrou melhor desempenho foi K=9.
+
+Sendo assim, o ensemble foi composto de três camadas advindas dos algoritmos mencionados, que produziram seus respectivos agrupamentos e esses resultados foram sumarizados em uma matriz de coocorrência, que determina quais dados foram agrupados pelos 3 algoritmos no mesmo rótulo. Essa matriz de coocorrência é submetida a um novo processo de clustering através do algoritmo **AglomerativeClustering**, produzindo assim a rotulação final para o conjunto de dados.
+
+## Resultados
