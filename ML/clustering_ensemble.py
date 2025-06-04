@@ -1,4 +1,5 @@
 #%%
+import random
 import s3fs
 import mlflow
 import numpy as np
@@ -8,19 +9,14 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering
-from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.metrics import calinski_harabasz_score, pairwise_distances
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator, ClusterMixin
 from sklearn.pipeline import Pipeline
 
-from tqdm import tqdm
-from itertools import combinations
-from collections import defaultdict
-from gensim.corpora import Dictionary
-from gensim.models import CoherenceModel, LdaModel
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from itertools import combinations, product
 
 BUCKET_PATH = "s3://bsky-posts-lake"
 GOLD_POSTS_PATH = f"{BUCKET_PATH}/gold/fato/posts"
@@ -32,17 +28,30 @@ EXPERIMENT_ID = 793754980848381686
 
 mlflow.set_tracking_uri("http://127.0.0.1:5000/")
 #%% MODEL CLASS
+def gerar_palette_clusters(cluster_set):
+    def cor_aleatoria_existente(existentes):
+        cor = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        while cor in existentes or cor == "#BCBCBC":
+            cor = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        return cor
+
+    usadas = set()
+    palette = {}
+
+    for i in cluster_set:
+        cor = cor_aleatoria_existente(usadas)
+        usadas.add(cor)
+        
+        palette[i] =  cor
+
+    palette[-1] = "#BCBCBC"
+    return palette
+
 def plot_clusters(X, labels, title, axis):
-    cluster_palette = {0: "#FF7468",
-                       1: "#61A8E2",
-                       2: "#84ED6C",
-                       3: "#CC73E7",
-                       4: "#E7D973",
-                       5: "#737DE7",
-                       6: "#552D58",
-                       7: "#225030",
-                       8: "#33686C",
-                       -1: "#BCBCBC"}
+    if labels:
+        cluster_palette = gerar_palette_clusters(set(labels))
+    else:
+        cluster_palette = None
     reduced = PCA(n_components=2).fit_transform(X)
     sns.scatterplot(x=reduced[:,0], 
                     y=reduced[:,1], 
@@ -52,81 +61,107 @@ def plot_clusters(X, labels, title, axis):
     axis.set_title(title)
 
 class TextClusterEnsemble(BaseEstimator, ClusterMixin):
-    def __init__(self, n_cluster, n_jobs=6, plot=False):
+    def __init__(self, n_jobs=6, plot=False, **final_params):
         self.plot = plot
+        self.it_per_model_ = 5
         self.n_jobs = n_jobs
         self.labels_list_ = []
         self.final_labels_ = []
-        self.model_params_ = dict(hdbscan = dict(min_cluster_size=80, 
-                                            min_samples=80, 
-                                            metric= 'cosine', 
-                                            cluster_selection_method="eom",
-                                            n_jobs=6),
-                                dbscan = dict(eps=0.4, 
-                                            min_samples=80, 
-                                            metric='cosine', 
-                                            n_jobs=6),
-                                kmeans = dict(n_clusters=n_cluster,
-                                            init='random',
-                                            n_init=30,
-                                            random_state=42),
-                                final = dict(metric='precomputed',
-                                            linkage='average',
-                                            n_clusters=n_cluster))
-        
+        self.co_matrix_ = None
+        self.valid_indices_ = None
+        self.model_params_ = {
+            HDBSCAN: dict(min_cluster_size=[50, 30, 50, 30, 15], 
+                    min_samples=[80, 80, 50, 50, 50], 
+                    metric= ['cosine'] * self.it_per_model_, 
+                    cluster_selection_method=['eom'] * self.it_per_model_,
+                    n_jobs=[6] * self.it_per_model_),
+
+            DBSCAN: dict(eps=[0.8, 0.8, 1.4, 1.4, 2.0], 
+                    min_samples=[50, 20, 50, 20, 80], 
+                    metric=['euclidean'] * self.it_per_model_, 
+                    n_jobs=[6] * self.it_per_model_),
+
+            AgglomerativeClustering: dict(
+                metric=final_params.get('metric', 'precomputed'),
+                linkage=final_params.get('linkage', 'average'),
+                n_clusters=final_params.get('n_clusters', 4)
+            )
+        }
+
     def has_plot(self):
         return self.plot
 
     def set_params(self, model, params):
         self.model_params_[model] = params
 
-    def get_params(self, model):
-        return self.model_params_[model]
+    def get_params(self, model, iteration=None):
+        params = self.model_params_[model]
+        if iteration is not None:
+            return {p: params[p][iteration] for p in params.keys()}
 
-    def _run_model(self, model, X, axes, text):
-        if not isinstance(model, AgglomerativeClustering):
+        return params
+    
+    def get_matrix(self, normalized=False):
+        mtx = self.co_matrix_
+        return mtx if not normalized else mtx / mtx.max()
+    
+    def _create_matrix(self, size):
+        cooc_matrix = np.zeros((size, size))
+
+        for labels in self.labels_list_:
+            for i in range(size):
+                for j in range(size):
+                    if labels[i] != -1 and labels[j] != -1 and labels[i] == labels[j]:
+                        cooc_matrix[i, j] += 1
+
+        np.fill_diagonal(cooc_matrix, 0)
+        in_any_cluster = (cooc_matrix > 0).any(axis=1)
+        self.valid_indices_ = np.where(in_any_cluster)[0]
+        self.co_matrix_ = cooc_matrix[np.ix_(self.valid_indices_, self.valid_indices_)]
+
+        self.co_matrix_ /= len(self.labels_list_)
+
+
+    def _run_model(self, model, X, axes=None, text=None, final=None):
+        if final is None:
             label = model.fit_predict(X)
             self.labels_list_.append(label)
         else:
-            label = model.fit_predict((1 - self.co_matrix_))
-            self.final_labels_ = label
+            label = model.fit_predict((1 - self.get_matrix(True)))
+            self.final_labels_ = np.full(X.shape[0], -1)
+            self.final_labels_[self.valid_indices_] = label
+            label = self.final_labels_
 
         if axes and text:
-            plot_clusters(X, label, text, axes)
-        
-        
+            mask = label != -1
+            plot_clusters(X[mask], label[mask], text, axes)
 
     def fit(self, X, y=None):
         text_list = [None, None, None]
-        fig, axes = None, None
         n_samples = X.shape[0]
-        self.co_matrix_ = np.zeros((n_samples, n_samples))
+        n_it = self.it_per_model_
+        models = list(self.model_params_.keys())
 
         if self.plot:
             fig = plt.figure(figsize=(20, 15))
-            gs = gridspec.GridSpec(2, 3, height_ratios=[1, 2])
-            axes = [plt.subplot(gs[0, x]) for x in range(3)] + [plt.subplot(gs[1, :])]
-            text_list = ["HDBSCAN Clustering", "DBSCAN Clustering", "Kmeans Clustering"]
+            gs = gridspec.GridSpec(3, n_it, height_ratios=[1, 1, 2])
+            axes = [[plt.subplot(gs[0, x]) for x in range(n_it)],
+                    [plt.subplot(gs[1, x]) for x in range(n_it)]]
+            axes2 = plt.subplot(gs[2, :])
+            text_list = ["HDBSCAN", "DBSCAN"]
 
-        model = HDBSCAN(**self.model_params_['hdbscan'])
-        self._run_model(model, X, axes[0], text_list[0])
-        model = DBSCAN(**self.model_params_['dbscan'])
-        self._run_model(model, X, axes[1], text_list[1])
-        model = KMeans(**self.model_params_['kmeans'])
-        self._run_model(model, X, axes[2], text_list[2])
+        for m in range(len(models)-1):
+            for i in range(self.it_per_model_):
+                model = models[m](**self.get_params(models[m], iteration=i))
+                self._run_model(model, X, axes[m][i], f"{text_list[m]}-{i+1}")
 
-        for labels in self.labels_list_:
-            for i in range(n_samples):
-                for j in range(n_samples):
-                    if labels[i] != -1 and labels[j] != -1 and labels[i] == labels[j]:
-                        self.co_matrix_[i, j] += 1
-        self.co_matrix_ /= len(self.labels_list_)
+        self._create_matrix(n_samples)
 
-        model = AgglomerativeClustering(**self.model_params_['final'])
-        self._run_model(model, X, axes[3], "Clustering Ensemble")
+        model = models[-1](**self.get_params(models[-1]))
+        self._run_model(model, X, axes2, "Clustering Ensemble", final=True)
 
         if self.plot:
-            plt.savefig(f"{PLOT_MLFLOW_ARTIFACTS}/plot_clusters.png")
+            plt.savefig(f"{PLOT_MLFLOW_ARTIFACTS}/plot_clusters-ruido.png")
             plt.show()
 
         return self
@@ -148,54 +183,14 @@ def loading_table(path):
             df_posts = pd.concat([df_posts, pd.read_parquet(f)])
     return df_posts
 
-#%% COHERENCE AND JACCARD FUNCTIONS
-dictionary = None
-def compute_coherence_for_cluster(texts_cluster):
-    if len(texts_cluster) < 2:
-        return None
-    
-    bow_corpus = [dictionary.doc2bow(doc) for doc in texts_cluster]
-    lda_model = LdaModel(
-        corpus=bow_corpus,
-        id2word=dictionary,
-        num_topics=5,
-        passes=3,
-        random_state=42
-    )
-    coherence_model = CoherenceModel(
-        model=lda_model,
-        texts=texts_cluster,
-        corpus=bow_corpus,
-        dictionary=dictionary,
-        coherence='c_npmi'
-    )
-    return coherence_model.get_coherence()
-
-def get_coherence(texts, labels):
-    global dictionary
-    cluster_docs = defaultdict(list)
-    for doc, label in zip(texts, labels):
-        cluster_docs[label].append(doc.split())
-
-    dictionary = Dictionary([txt.split() for txt in texts])
-    tasks = [docs for label, docs in cluster_docs.items() if len(docs) >= 2]
-
-    coherences = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(compute_coherence_for_cluster, docs) for docs in tasks]
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Computing coherence"):
-            coherence = future.result()
-            if coherence is not None:
-                coherences.append(coherence)
-    return np.mean(coherences) if coherences else 0.0
-
+#%% JACCARD AND CLUSTER DISTANCE FUNCTIONS
 def get_jaccard(df):
     jaccard_score = []
     cluster_terms = {}
     labels_set = list(df['labels'].unique())
     
     for l in labels_set:
-        label_text = df_text_labels[df_text_labels['labels'] == l]['text']
+        label_text = df[df['labels'] == l]['post']
         cluster_terms[l] = set(" ".join(label_text.astype(str).tolist()).split(" "))
 
     for c in list(combinations(labels_set, 2)):
@@ -206,8 +201,25 @@ def get_jaccard(df):
 
     return np.mean(jaccard_score)
 
-#%% LOADING DATA
+def get_cluster_distance(df):
+    path = f"{PLOT_MLFLOW_ARTIFACTS}/cluster_distances.png"
 
+    embeddings_df = pd.DataFrame(df["embedding"].tolist(), index=df.index)
+    embeddings_df.columns = [f"embedding_{i}" for i in range(embeddings_df.shape[1])]
+    embeddings_df = pd.concat([embeddings_df, df["labels"]], axis=1)
+
+    centroids = embeddings_df.groupby("labels").mean().values
+    dist_matrix = pairwise_distances(centroids)
+    mean_dist = dist_matrix[np.tril_indices(len(centroids), k=-1)].mean()
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(dist_matrix, annot=True, cmap="YlGnBu")
+    plt.title("Média da Distância entre Clusters")
+    plt.savefig(path)
+
+    return mean_dist, path
+
+#%% LOADING DATA
 df_posts = loading_table(f"{GOLD_POSTS_PATH}/*/*.parquet")
 path_silver = f"{SILVER_POSTS_PATH}/*/*.parquet"
 df_posts = pd.merge(
@@ -217,40 +229,45 @@ df_posts = pd.merge(
     how='inner')
 
 X  = np.vstack(df_posts["embedding"].values)
-text_posts = df_posts['yaked'].to_list()
 
 # %% RUN PIPELINE
 pipeline = Pipeline([
-    ("scaler", RobustScaler()),
-    ("ensemble_cluster", TextClusterEnsemble(n_cluster=9, plot=True))
-])
+    ("scaler", MinMaxScaler()),
+    ("ensemble_cluster", TextClusterEnsemble(plot=True))
+]) 
 
 mlflow.set_experiment(experiment_id=EXPERIMENT_ID)
 with mlflow.start_run():
-   pipeline.fit(X)
-   esb = pipeline.named_steps['ensemble_cluster']
-   mlflow.log_params(esb.get_params('final'))
+    pipeline.fit(X)
+    esb = pipeline.named_steps['ensemble_cluster']
+    mlflow.log_params(esb.get_params(AgglomerativeClustering))
 
-   labels = esb.predict(X)
-   mask = labels != -1
+    labels = esb.predict(X)
+    mask = labels != -1
 
-   if len(set(labels[mask])) > 1:
-       sil = silhouette_score(X[mask], labels[mask])
-       db = davies_bouldin_score(X[mask], labels[mask])
-       ch = calinski_harabasz_score(X[mask], labels[mask])
+    if len(set(labels[mask])) > 1:
+        sil = silhouette_score(X[mask], labels[mask])
+        db = davies_bouldin_score(X[mask], labels[mask])
+        ch = calinski_harabasz_score(X[mask], labels[mask])
 
-       mlflow.log_metric("silhouette_score", sil)
-       mlflow.log_metric("davies_bouldin_score", db)
-       mlflow.log_metric("calinski_harabasz_score", ch)
+        mlflow.log_metric("silhouette_score", sil)
+        mlflow.log_metric("davies_bouldin_score", db)
+        mlflow.log_metric("calinski_harabasz_score", ch)
 
-   df_text_labels = pd.DataFrame({'text': text_posts, 'labels': labels})
-   df_text_labels.to_csv(f"{DATA_MLFLOW_ARTIFACTS}/clustering_ensemble.csv", index=False)
+    df_posts['labels'] = labels
+    csv_path = f"{DATA_MLFLOW_ARTIFACTS}/clustering_ensemble-ruido.csv"
+    df_labels = df_posts[['SK_post', 'yaked', 'labels']].rename(columns={'yaked': 'post'})
+    df_labels.to_csv(csv_path, index=False)
 
-   df_text_labels = df_text_labels[df_text_labels['labels'] != -1]
-   mlflow.log_metric("jaccard_mean_score", get_jaccard(df_text_labels))
+    dist_mean, dist_path = get_cluster_distance(df_posts[['embedding', 'labels']])
 
-   if esb.has_plot():
-       mlflow.log_artifact(f"{PLOT_MLFLOW_ARTIFACTS}/plot_clusters.png", artifact_path="figures")
-   mlflow.log_artifact(f"{DATA_MLFLOW_ARTIFACTS}/clustering_ensemble.csv", artifact_path="results")
+    mlflow.log_metric("jaccard_mean_score", get_jaccard(df_labels))
+    mlflow.log_metric("distance_mean_centroids", dist_mean)
 
-#%%
+    if esb.has_plot():
+        mlflow.log_artifact(f"{PLOT_MLFLOW_ARTIFACTS}/plot_clusters-ruido.png", artifact_path="figures")
+
+    mlflow.log_artifact(dist_path, artifact_path="figures")
+    mlflow.log_artifact(csv_path, artifact_path="results")
+
+    mlflow.set_tag("mlflow.runName", f"Ensemble-AGG-Só-RUIDO-1")
