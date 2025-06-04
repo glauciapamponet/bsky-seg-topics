@@ -32,12 +32,13 @@ def loading_table(path):
 def fit_model(model, vectors):
     model.fit(vectors)
     labels = model.labels_
+    mask = labels != -1
     n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
     try:
         metrics = dict(
-            silhouette_avg = silhouette_score(vecs[vec], labels),
-            davies_bouldin = davies_bouldin_score(vecs[vec], labels),
-            calinski_harabasz = calinski_harabasz_score(vecs[vec], labels)
+            silhouette_avg = silhouette_score(vectors[mask], labels[mask]),
+            davies_bouldin = davies_bouldin_score(vectors[mask], labels[mask]),
+            calinski_harabasz = calinski_harabasz_score(vectors[mask], labels[mask])
         )
     except ValueError as e:
         metrics = {"silhouette_avg" : -1, "davies_bouldin" : -1, "calinski_harabasz" : -1}
@@ -93,14 +94,14 @@ elbow_kmeans(10, X_robust)
 # Grid Search DBSCAN
 
 samples = [20, 50, 80]
-eps_values = [0.8, 1.1, 1.4]
+eps_values = [0.8, 1.4, 2.0]
 distances = ['cosine', 'euclidean']
 vecs = {"Robust": X_robust, "minMax": X_minMax}
 combinations = list(product(eps_values, samples, distances, vecs.keys()))
 i = 1
 
 for eps, sample, dist, vec in combinations:
-    mlflow.set_experiment(experiment_id=931016321717885447)
+    mlflow.set_experiment(experiment_id=818640941147033185)
     with mlflow.start_run():
         clt = DBSCAN(eps=eps, 
                         min_samples=sample, 
@@ -108,9 +109,11 @@ for eps, sample, dist, vec in combinations:
                         n_jobs=6)
         metrics, n_clusters = fit_model(clt, vecs[vec])
     
-        mlflow.set_tag("mlflow.runName", f"DBSCAN-{i}")
+        mlflow.set_tag("mlflow.runName", f"DBSCAN-SR-{i}")
         mlflow.log_params({"eps": eps,
                             "min_samples": sample,
+                            "distance": dist,
+                            "vector": vec,
                             "n_clusters": n_clusters})
         mlflow.log_metrics(metrics)
     i+=1
@@ -123,11 +126,10 @@ samples = [20, 50, 80]
 sizes = [15, 30, 50]
 distances = ['cosine', 'euclidean']
 vecs = {"Robust": X_robust, "minMax": X_minMax}
-combinations = list(product(samples, distances, sizes, vecs.keys()))
+combinations = list(product(distances, samples, sizes, vecs.keys()))
 i = 1
-
 for distance, sample, size, vec in combinations:
-    mlflow.set_experiment(experiment_id=445386104313139070)
+    mlflow.set_experiment(experiment_id=114565549749737657)
     with mlflow.start_run():
         clt = HDBSCAN(min_cluster_size=size, 
                         min_samples=sample, 
@@ -136,7 +138,7 @@ for distance, sample, size, vec in combinations:
                         n_jobs=6)
         metrics, n_clusters = fit_model(clt, vecs[vec])
 
-        mlflow.set_tag("mlflow.runName", f"HDBSCAN-{i}")
+        mlflow.set_tag("mlflow.runName", f"HDBSCAN-SR-{i}")
         mlflow.log_params({"vector": vec,
                         "cluster_size": size,
                         "min_samples": sample,
