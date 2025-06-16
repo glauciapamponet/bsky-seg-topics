@@ -8,15 +8,16 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering
+from sklearn.cluster import HDBSCAN, DBSCAN, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from sklearn.metrics import calinski_harabasz_score, pairwise_distances
 from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator, ClusterMixin
 from sklearn.pipeline import Pipeline
 
-from itertools import combinations, product
+from itertools import combinations
 
 BUCKET_PATH = "s3://bsky-posts-lake"
 GOLD_POSTS_PATH = f"{BUCKET_PATH}/gold/fato/posts"
@@ -48,7 +49,7 @@ def gerar_palette_clusters(cluster_set):
     return palette
 
 def plot_clusters(X, labels, title, axis):
-    if labels:
+    if labels is not None:
         cluster_palette = gerar_palette_clusters(set(labels))
     else:
         cluster_palette = None
@@ -70,21 +71,21 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         self.co_matrix_ = None
         self.valid_indices_ = None
         self.model_params_ = {
-            HDBSCAN: dict(min_cluster_size=[50, 30, 50, 30, 15], 
-                    min_samples=[80, 80, 50, 50, 50], 
+            HDBSCAN: dict(min_cluster_size=[80, 50, 80, 50, 30], 
+                    min_samples=([80] * 2) + ([110] * 3), 
                     metric= ['cosine'] * self.it_per_model_, 
                     cluster_selection_method=['eom'] * self.it_per_model_,
                     n_jobs=[6] * self.it_per_model_),
 
-            DBSCAN: dict(eps=[0.8, 0.8, 1.4, 1.4, 2.0], 
-                    min_samples=[50, 20, 50, 20, 80], 
+            DBSCAN: dict(eps=[2.4, 2.4, 2.5, 2.4, 2.5], 
+                    min_samples=[50, 80, 80, 110, 140], 
                     metric=['euclidean'] * self.it_per_model_, 
                     n_jobs=[6] * self.it_per_model_),
 
             AgglomerativeClustering: dict(
                 metric=final_params.get('metric', 'precomputed'),
                 linkage=final_params.get('linkage', 'average'),
-                n_clusters=final_params.get('n_clusters', 4)
+                n_clusters=final_params.get('n_clusters', 2)
             )
         }
 
@@ -135,6 +136,10 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         if axes and text:
             mask = label != -1
             plot_clusters(X[mask], label[mask], text, axes)
+            print(f"{text}")
+            print(f"sil:{silhouette_score(X[mask], label[mask])}")
+            print(f"ch:{calinski_harabasz_score(X[mask], label[mask])}")
+            print(f"db:{davies_bouldin_score(X[mask], label[mask])}")
 
     def fit(self, X, y=None):
         text_list = [None, None, None]
@@ -143,11 +148,11 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         models = list(self.model_params_.keys())
 
         if self.plot:
-            fig = plt.figure(figsize=(20, 15))
-            gs = gridspec.GridSpec(3, n_it, height_ratios=[1, 1, 2])
+            fig = plt.figure(figsize=(20, 5))
+            gs = gridspec.GridSpec(2, n_it+1, width_ratios=[1, 1, 1, 1, 1, 2])
             axes = [[plt.subplot(gs[0, x]) for x in range(n_it)],
                     [plt.subplot(gs[1, x]) for x in range(n_it)]]
-            axes2 = plt.subplot(gs[2, :])
+            axes2 = plt.subplot(gs[:, n_it])
             text_list = ["HDBSCAN", "DBSCAN"]
 
         for m in range(len(models)-1):
@@ -204,9 +209,10 @@ def get_jaccard(df):
 def get_cluster_distance(df):
     path = f"{PLOT_MLFLOW_ARTIFACTS}/cluster_distances.png"
 
-    embeddings_df = pd.DataFrame(df["embedding"].tolist(), index=df.index)
+    df_clean = df[df['labels'] != -1]
+    embeddings_df = pd.DataFrame(df_clean["embedding"].tolist(), index=df_clean.index)
     embeddings_df.columns = [f"embedding_{i}" for i in range(embeddings_df.shape[1])]
-    embeddings_df = pd.concat([embeddings_df, df["labels"]], axis=1)
+    embeddings_df = pd.concat([embeddings_df, df_clean["labels"]], axis=1)
 
     centroids = embeddings_df.groupby("labels").mean().values
     dist_matrix = pairwise_distances(centroids)
@@ -219,6 +225,22 @@ def get_cluster_distance(df):
 
     return mean_dist, path
 
+#%% CLEANNING SIMILARITY
+def cleaning_similarity(X):
+    similarity_matrix = cosine_similarity(X)
+
+    threshold = 0.99
+    to_drop = set()
+
+    for i in range(similarity_matrix.shape[0]):
+        if i in to_drop:
+            continue
+        for j in range(i + 1, similarity_matrix.shape[1]):
+            if similarity_matrix[i, j] > threshold:
+                to_drop.add(j)
+    
+    return to_drop
+
 #%% LOADING DATA
 df_posts = loading_table(f"{GOLD_POSTS_PATH}/*/*.parquet")
 path_silver = f"{SILVER_POSTS_PATH}/*/*.parquet"
@@ -229,7 +251,10 @@ df_posts = pd.merge(
     how='inner')
 
 X  = np.vstack(df_posts["embedding"].values)
+not_in_set = np.setdiff1d(np.arange(X.shape[0]), list(cleaning_similarity(X)))
 
+#%%
+X = X[not_in_set]
 # %% RUN PIPELINE
 pipeline = Pipeline([
     ("scaler", MinMaxScaler()),
@@ -254,7 +279,9 @@ with mlflow.start_run():
         mlflow.log_metric("davies_bouldin_score", db)
         mlflow.log_metric("calinski_harabasz_score", ch)
 
-    df_posts['labels'] = labels
+    full_labels = np.full(len(df_posts["embedding"]), -1)
+    full_labels[not_in_set] = labels
+    df_posts['labels'] = full_labels
     csv_path = f"{DATA_MLFLOW_ARTIFACTS}/clustering_ensemble-ruido.csv"
     df_labels = df_posts[['SK_post', 'yaked', 'labels']].rename(columns={'yaked': 'post'})
     df_labels.to_csv(csv_path, index=False)
@@ -270,4 +297,6 @@ with mlflow.start_run():
     mlflow.log_artifact(dist_path, artifact_path="figures")
     mlflow.log_artifact(csv_path, artifact_path="results")
 
-    mlflow.set_tag("mlflow.runName", f"Ensemble-AGG-Só-RUIDO-1")
+    mlflow.set_tag("mlflow.runName", f"AGG-New-DBSCAN-3")
+
+# %%
