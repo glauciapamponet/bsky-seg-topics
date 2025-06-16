@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from itertools import product
 
 from sklearn.cluster import KMeans, HDBSCAN, DBSCAN
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
@@ -77,26 +78,42 @@ def elbow_kmeans(k_range, vec):
     plt.grid(True)
     plt.show()
 
+def cleaning_similarity(X):
+    similarity_matrix = cosine_similarity(X)
+
+    threshold = 0.95
+    to_drop = set()
+
+    for i in range(similarity_matrix.shape[0]):
+        if i in to_drop:
+            continue
+        for j in range(i + 1, similarity_matrix.shape[1]):
+            if similarity_matrix[i, j] > threshold:
+                to_drop.add(j)
+    
+    return to_drop
+
 # %%
 df_posts = loading_table(f"{GOLD_POSTS_PATH}/*/*.parquet")
 
 X  = np.vstack(df_posts["embedding"].values)
-X_minMax = MinMaxScaler().fit_transform(X)
-X_robust = RobustScaler().fit_transform(X)
+not_in_set = np.setdiff1d(np.arange(X.shape[0]), list(cleaning_similarity(X)))
+
+X_minMax = MinMaxScaler().fit_transform(X[not_in_set])
+X_robust = RobustScaler().fit_transform(X[not_in_set])
 #%%
-elbow_dbscan([20, 50, 80], X_minMax)
+elbow_dbscan([50, 80, 110, 140], X_minMax)
 elbow_dbscan([20, 50, 80], X_robust)
 
 elbow_kmeans(10, X_minMax)
 elbow_kmeans(10, X_robust)
 
-# %%
-# Grid Search DBSCAN
+# %% Grid Search DBSCAN
 
-samples = [20, 50, 80]
-eps_values = [0.8, 1.4, 2.0]
-distances = ['cosine', 'euclidean']
-vecs = {"Robust": X_robust, "minMax": X_minMax}
+samples = [50, 80, 110, 140]
+eps_values = [2.4, 2.5, 2.6]
+distances = ['euclidean', 'cosine']
+vecs = {"minMax": X_minMax, "robust": X_robust}
 combinations = list(product(eps_values, samples, distances, vecs.keys()))
 i = 1
 
@@ -109,7 +126,7 @@ for eps, sample, dist, vec in combinations:
                         n_jobs=6)
         metrics, n_clusters = fit_model(clt, vecs[vec])
     
-        mlflow.set_tag("mlflow.runName", f"DBSCAN-SR-{i}")
+        mlflow.set_tag("mlflow.runName", f"DBSCAN-SR-POS-SIMILARITY-{i}")
         mlflow.log_params({"eps": eps,
                             "min_samples": sample,
                             "distance": dist,
@@ -119,12 +136,11 @@ for eps, sample, dist, vec in combinations:
     i+=1
 
 
-#%% 
-# Grid Search HDBSCAN
+#%% Grid Search HDBSCAN
 
-samples = [20, 50, 80]
-sizes = [15, 30, 50]
-distances = ['cosine', 'euclidean']
+samples = [50, 80, 110, 140]
+sizes = [30, 50, 80]
+distances = ['cosine']
 vecs = {"Robust": X_robust, "minMax": X_minMax}
 combinations = list(product(distances, samples, sizes, vecs.keys()))
 i = 1
@@ -138,7 +154,7 @@ for distance, sample, size, vec in combinations:
                         n_jobs=6)
         metrics, n_clusters = fit_model(clt, vecs[vec])
 
-        mlflow.set_tag("mlflow.runName", f"HDBSCAN-SR-{i}")
+        mlflow.set_tag("mlflow.runName", f"HDBSCAN-SR-POS-SIMILARITY-{i}")
         mlflow.log_params({"vector": vec,
                         "cluster_size": size,
                         "min_samples": sample,
@@ -148,15 +164,14 @@ for distance, sample, size, vec in combinations:
         mlflow.log_metrics(metrics)
     i+=1
         
-#%%
-# Grid Search KMeans
+#%% Grid Search KMeans
 
 n_clusters = [3, 4, 5]
 n_inits = [10, 30, 50, 80]
 inits = ['k-means++', 'random']
 vecs = {"Robust": X_robust, "minMax": X_minMax}
 combinations = list(product(n_clusters, inits, n_inits, vecs.keys()))
-i = 53
+i = 1
 
 for cluster, init, n_init in combinations:
     mlflow.set_experiment(experiment_id=975870007803510489)
