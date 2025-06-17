@@ -48,15 +48,31 @@ O vocabulário do conjunto de dados reuniu em todo aproximadamente 23.385 palavr
 A ideia para o projeto é encontrar estratégias de segmentação que possam trazer uma apresentação de tópicos dentro dos dados coletados. Para isso, foram considerados algoritmos de clustering de dados. Nesse estudo foram escolhidos três modelos que passaram por avaliação com permutação de hiperparâmetros (Grid Search) e em seguida produziram resultados para uma matriz de coocorrência com seus melhores resultados avulsos.
 Para os três algoritmos testados foram disponibilizados os dados vetorizados do DataLake e transformados de forma escalar em dois formatos: 
 - **RobustScaler**: dimensionamento dos embeddings de acordo com seu IQR (intervalo inter-quartil). Útil em padronizar dados com outliers ou ruídos.
-- **MinMaxScaler**: dimensionamento dos embeddings no intervalo [0,1] de forma padrão, usando valores maximo e mínimo. 
+- **MinMaxScaler**: dimensionamento dos embeddings no intervalo [0,1] de forma padrão, usando valores maximo e mínimo.
+
+A seleção do conjunto de dados também passou por uma limpeza de valores duplicados visando uma melhor mineração de ruídos. Foram identificados alguns textos identicos de mesmos autores, provinentes de páginas de notícias que acabavam poluindo a distribuição. Sendo assim, um corte baseado na distância via similaridade de cosseno de até **0.99** foi realizado a fim de solucionar essa questão. 
 
 Entre os algoritmos avaliados estão **KMeans**, **DBSCAN** e **HDBSCAN**.
 
 Usando o Mlflow, inicialmente foi realizada uma avaliação para cada tipo de modelo através de **Grid Search**, contando como estimativa de alguns paramêtros a observação do comportamento dos dados aos modelos, como no caso do Kmeans, onde foi utilizado o Elbow Method (Método do Cotovelo) para determinar em quais valores de K a inércia do modelo sofreria alteração. O método também foi usado para estipular valores para DBSCAN observando o comportamento do valor de epsilon (raio de área mínima para formação de um cluster) em relação aos dados.<br>Ao todo, foram feitas mais de 300 execuções nos experimentos destinados a cada tipo de modelo para definir os melhores parametros para o Clustering Ensemble. Nos experimentos do Mlflow, foram registrados os hiperparâmetros de cada execução, bem como as métricas de avaliação básicas: **silhoute, davies bouldin e calinski harabasz**.
-<!-- ![As melhores execuções de cada experimento](Assets/mlflow_comparing.png)
 
-De forma geral, a medição das métricas baixas permaneceu abaixo do satisfatório para quase todas as execuções dos experimentos. A estimativa é de que a formação de clusters no conjunto de dados se dá com áreas muito pequenas, o que abre potencial para uma quantidade elevada e fora de possibilidade de observação de clusters, o que aumentou o nível de ruído nos hiperparâmetros mais adequados. No algoritmo que não apresenta formação de clusters por área, o Kmeans, a quantidade K que demonstrou melhor desempenho foi K=9.
+O pipeline adotado para o esquema de Clustering Ensemble contou com 10 camadas internas e uma camada final de saída das labels. Após execução de experimentos, foram escolhidas 5 variações do algoritmo DBSCAN e outras 5 variações do algoritmo HDBSCAN, por serem os mais bem sucedidos entre os 3 tipos de algoritmo explorados. Essas camadas produziram seus respectivos agrupamentos e os resultados foram sumarizados em uma matriz de coocorrência, que determina quais dados foram agrupados pelos 10 algoritmos no mesmo rótulo.<br> Uma vez que o modelo é constituido de algoritmos que produzem ruído, a matriz de coocorrência desconsidera conteúdos que não foram inseridos em nenhum agrupamento durante as 10 execuções de clustering, caracterizando ruídos absolutos. Ela é submetida a um novo processo através do algoritmo **AglomerativeClustering**, produzindo assim a rotulação final para o conjunto de dados.
 
-Sendo assim, o ensemble foi composto de três camadas advindas dos algoritmos mencionados, que produziram seus respectivos agrupamentos e esses resultados foram sumarizados em uma matriz de coocorrência, que determina quais dados foram agrupados pelos 3 algoritmos no mesmo rótulo. Essa matriz de coocorrência é submetida a um novo processo de clustering através do algoritmo **AglomerativeClustering**, produzindo assim a rotulação final para o conjunto de dados. -->
+## Execução
+
+A execução das camadas do pipeline de Ensemble não mostrou grande variabilidade em resultados. Todas as 10 camadas produziram a mesma quantidade de grupos, sendo assim possível determinar com clareza a separação arbitrária da camada final em K=2.
+
+![Métricas de Camadas Internas Ensemble](Assets/comparação-layers.png)
+
+É possível perceber que, no primeiro gráfico, mesmo para os melhores parâmetros, o conjunto de dados não mostra um desempenho ótimo em termos de separação dos grupos do ponto de vista das fronteiras de decisão que compoem esses clusters. Também fica claro que apesar da baixa variabilidade da avaliação em cada camada, o algoritmo HDBSCAN apresentou clusters menos propensos a sobreposição, apesar de ainda próximos.<br>
+A avaliação acerca da variabilidade de dados intra e entre clusters no segundo gráfico mostra que no geral o conjunto teve uma variabilidade com amplitude baixa, sendo essa próxima a zero nas camadas HDBSCAN. Já em DBSCAN, com uma amplitude baixa, porem com desempenho crescente, a avaliação Callinski-Harabasz mostra potencial de maior distinção entre clusters, caso prosseguisse como ajuste de parâmetros.<br>
+Já a avaliação de similaridade geral no terceiro gráfico indica melhor resultado nos modelos HDBSCAN que conclui resultados consistentes dentro das 5 camadas, mostrando as menores dispersões intra-clusters das 10 iterações. Já em DBSCAN, houve certa oscilação entre as iterações, tendo uma geral mediana.
+
+![Distancia entre Clusters e Métricas Finais do Ensemble](Assets/metricas-finais-heatmap.png)
+
+Na camada final do Ensemble é possivel observar que as métricas de avaliação interna e externa decaíram quando comparadas às das camadas internas do HDBSCAN, porém muito próximas às de DBSCAN.<br>
+Isso pode indicar que os registros que foram agrupados em DBSCAN mas não em HDBSCAN oferecem impacto o suficiente para que o clustering hierárquico tenda a uma performance mais próxima a DBSCAN. Uma evidência seria a comparação das métricas finais com as de DBSCAN, em que a variabilidade de dados sinaliza ser mais alta em comparação com as iterações HDBSCAN, enquanto os limites de clusters são menos marcados e a similaridade é menor do que em HDBSCAN.<br>
+A distância entre centróides dos dois clusters não conclui que estão em locais de completos opostos no espaço vetorial, mas é significativa o suficiente para permitir que exista distancia distinguível entre os grupos.
 
 ## Resultados
+
