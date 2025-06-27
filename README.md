@@ -20,7 +20,7 @@ Sendo assim, considerando o contexto temporal e as características da API, a co
 | reply_count  | Integer    | Quantidade de respostas |
 
 ## Datalake de Posts
-![Esquema de Datalake](Assets/Analysis Images/datalake.png)
+![Esquema de Datalake](Assets/Analysis%20Images/datalake.png)
 
 A coleta de dados dada a partir do fornecimento da API do Bluesky foi feita entre os dias 15 e 31 de dezembro de 2024. Através de um trigger em função Lambda foi possível coletar os posts a cada hora dos 15 dias, na tentativa de amenizar duplicatas considerando os posts em maior evidência. 
 
@@ -31,16 +31,16 @@ Um Bucket S3 foi disponibilizado como datalake inicialmente recebendo os arquivo
 ## Análise Exploratória
 O período de 15 de coleta de postagens do Bluesky envolvendo a API que recolhe registros do feed "What's Hot" levantou a cada hora de cada dia um montante de 100 posts via trigger de Lambda Function. A atividade totalizou uma coleta de aproximadamente 36.000 registros de posts, desconsiderando os posts que estavam em alta no momento da coleta, mas que não pertenciam a uma data no intervalo escolhido. Desse total, após remoção de duplicatas, limpeza de stopwords e extração de palavras-chave (resultando em registros vazios ou nulos onde se encontravam repetições da mesma palavra ou apenas citações de outros posts), esse número decaiu para 18.425 posts.
 
-![Wordcloud e Frequência Top 20](Assets/Analysis Images/wordcloud-barplot.png)
+![Wordcloud e Frequência Top 20](Assets/Analysis%20Images/wordcloud-barplot.png)
 
 Foi possível perceber que o período usado para a extração de posts influenciou completamente as palavras mais populares na rede daquele momento, o que era de se esperar. Existe uma evidente diferença entre a palavra mais citada no dataset, relacionada ao natal e a palavra menos citada que provavelmente provém de tópico político.
 
-![Análise Temporal](Assets/Analysis Images/plot_temporal.png)
+![Análise Temporal](Assets/Analysis%20Images/plot_temporal.png)
 
 A distribuição da quantidade de posts conforme os dias do intervalo se manteve com poucas alterações mesmo após a limpeza, levando em fator a soma de posts por todos os dias do período. <br>Já a distribuição agrupada por dias da semana mostrou uma queda perceptível na sexta-feira (Friday) acompanhada de um alto range do intervalo de confiança. Observando o calendário correspondente ao período, nota-se que o espaço de 16 dias da coleta contemplou 3 vezes os dias Domingo (Sunday), Segunda-feira(Monday) e Terça-feira(Tuesday) equanto que Quarta-feira(Wednesdey), Quinta-feira(Thirsday), Sexta-feira(Friday) e Sábado(Saturday), rotacionaram uma vez a menos. O intervalo de confiança discrepante em Friday pode sugerir um recuo na criação de posts evidentes em uma das 2 datas que contemplam o dia. <br>A distribuição horária nas postagens mostrou variabilidade explicável, considerando que a coleta de horário se dá em hora local dos posts, sendo maior parte deles dentro de fusos dos Estados Unidos. O trecho com menor contagem na faixa de horario da madrugada consolida a falta de atividade de usuários por sono, além dos picos relativos e absolutos consolidarem os horarios de almoço e fim do dia como periodos de maior atividade. 
 
 ### Observando palavras de maior frequência
-![Correlação e Cobertura de Palavras](Assets/Analysis Images/cobertura.png)
+![Correlação e Cobertura de Palavras](Assets/Analysis%20Images/cobertura.png)
 
 O vocabulário do conjunto de dados reuniu em todo aproximadamente 23.385 palavras citadas e adotadas como palavras chave ou de evidência para identificação. Consultando arbitrariamente as palavras mais usadas com frequencia em posts acima de 150, foi extraído um total de 97 palavras mais citadas, representando 0,4% de todo o vocabulário. A cobertura, que determina quantos posts do dataset possuem ao menos uma das 97 mais citadas apresenta valores abaixo dos 20%, o que esclarece a possivel discrepância entre a presença de tópicos mais definidos e a presença de tópicos mais individuais, além de uma alta variabilidade de vocabulário de menor frequência. <br>A rede de relações entre essas 97 palavras mais uma vez endossa a presença do feriado nas conversas da plataforma no período, uma vez que ao centro do grafo, onde vemos palavras relacionadas às festas, está a parte mais pesada de vértices. Ao redor, é possivel encontrar relações a assuntos políticos ('public' <> 'health'), artisticos ('nature' <> 'photography') e diversos ('social' <> 'media').
 
@@ -62,13 +62,13 @@ O pipeline adotado para o esquema de Clustering Ensemble contou com 10 camadas i
 
 A execução das camadas do pipeline de Ensemble não mostrou grande variabilidade em resultados. Todas as 10 camadas produziram a mesma quantidade de grupos, sendo assim possível determinar com clareza a separação arbitrária da camada final em K=2.
 
-![Métricas de Camadas Internas Ensemble](Assets/Analysis Images/comparação-layers.png)
+![Métricas de Camadas Internas Ensemble](Assets/Analysis%20Images/comparação-layers.png)
 
 É possível perceber que, no primeiro gráfico, mesmo para os melhores parâmetros, o conjunto de dados não mostra um desempenho ótimo em termos de separação dos grupos do ponto de vista das fronteiras de decisão que compoem esses clusters. Também fica claro que apesar da baixa variabilidade da avaliação em cada camada, o algoritmo HDBSCAN apresentou clusters menos propensos a sobreposição, apesar de ainda próximos.<br>
 A avaliação acerca da variabilidade de dados intra e entre clusters no segundo gráfico mostra que no geral o conjunto teve uma variabilidade com amplitude baixa, sendo essa próxima a zero nas camadas HDBSCAN. Já em DBSCAN, com uma amplitude baixa, porem com desempenho crescente, a avaliação Callinski-Harabasz mostra potencial de maior distinção entre clusters, caso prosseguisse como ajuste de parâmetros.<br>
 Já a avaliação de similaridade geral no terceiro gráfico indica melhor resultado nos modelos HDBSCAN que conclui resultados consistentes dentro das 5 camadas, mostrando as menores dispersões intra-clusters das 10 iterações. Já em DBSCAN, houve certa oscilação entre as iterações, tendo uma geral mediana.
 
-![Distancia entre Clusters e Métricas Finais do Ensemble](Assets/Analysis Images/metricas-finais-heatmap.png)
+![Distancia entre Clusters e Métricas Finais do Ensemble](Assets/Analysis%20Images/metricas-finais-heatmap.png)
 
 Na camada final do Ensemble é possivel observar que as métricas de avaliação interna e externa decaíram quando comparadas às das camadas internas do HDBSCAN, porém muito próximas às de DBSCAN.<br>
 Isso pode indicar que os registros que foram agrupados em DBSCAN mas não em HDBSCAN oferecem impacto o suficiente para que o clustering hierárquico tenda a uma performance mais próxima a DBSCAN. Uma evidência seria a comparação das métricas finais com as de DBSCAN, em que a variabilidade de dados sinaliza ser mais alta em comparação com as iterações HDBSCAN, enquanto os limites de clusters são menos marcados e a similaridade é menor do que em HDBSCAN.<br>
