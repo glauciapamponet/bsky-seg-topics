@@ -13,22 +13,13 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
+from Assets.Code import LoadingData
 
-BUCKET_PATH = "s3://bsky-posts-lake"
-GOLD_POSTS_PATH = f"{BUCKET_PATH}/gold/fato/posts"
-SILVER_POSTS_PATH = f"{BUCKET_PATH}/silver/fato/posts"
+data_loader = LoadingData.LoadingData()
 
 mlflow.set_tracking_uri("http://127.0.0.1:5000/")
 
 #%%
-def loading_table(path):
-    s3 = s3fs.S3FileSystem()
-    parquet_files = s3.glob(path)
-    df_posts = pd.DataFrame()
-    for file in parquet_files:
-        with s3.open(file) as f:
-            df_posts = pd.concat([df_posts, pd.read_parquet(f)])
-    return df_posts
 
 def fit_model(model, vectors):
     model.fit(vectors)
@@ -94,7 +85,7 @@ def cleaning_similarity(X):
     return to_drop
 
 # %%
-df_posts = loading_table(f"{GOLD_POSTS_PATH}/*/*.parquet")
+df_posts = data_loader.load_posts()
 
 X  = np.vstack(df_posts["embedding"].values)
 not_in_set = np.setdiff1d(np.arange(X.shape[0]), list(cleaning_similarity(X)))

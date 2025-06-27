@@ -1,6 +1,5 @@
 #%%
 import random
-import s3fs
 import mlflow
 import numpy as np
 import pandas as pd
@@ -19,9 +18,9 @@ from sklearn.pipeline import Pipeline
 
 from itertools import combinations
 
-BUCKET_PATH = "s3://bsky-posts-lake"
-GOLD_POSTS_PATH = f"{BUCKET_PATH}/gold/fato/posts"
-SILVER_POSTS_PATH = f"{BUCKET_PATH}/silver/fato/posts"
+from Assets.Code import LoadingData
+
+data_loader = LoadingData.LoadingData()
 
 PLOT_MLFLOW_ARTIFACTS = f"../Assets/Mlflow Artifacts"
 DATA_MLFLOW_ARTIFACTS = f"../Data"
@@ -106,7 +105,7 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         mtx = self.co_matrix_
         return mtx if not normalized else mtx / mtx.max()
     
-    def _create_matrix(self, size):
+    def __create_matrix(self, size):
         cooc_matrix = np.zeros((size, size))
 
         for labels in self.labels_list_:
@@ -123,7 +122,7 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         self.co_matrix_ /= len(self.labels_list_)
 
 
-    def _run_model(self, model, X, axes=None, text=None, final=None):
+    def __run_model(self, model, X, axes=None, text=None, final=None):
         if final is None:
             label = model.fit_predict(X)
             self.labels_list_.append(label)
@@ -158,12 +157,12 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         for m in range(len(models)-1):
             for i in range(self.it_per_model_):
                 model = models[m](**self.get_params(models[m], iteration=i))
-                self._run_model(model, X, axes[m][i], f"{text_list[m]}-{i+1}")
+                self.__run_model(model, X, axes[m][i], f"{text_list[m]}-{i+1}")
 
-        self._create_matrix(n_samples)
+        self.__create_matrix(n_samples)
 
         model = models[-1](**self.get_params(models[-1]))
-        self._run_model(model, X, axes2, "Clustering Ensemble", final=True)
+        self.__run_model(model, X, axes2, "Clustering Ensemble", final=True)
 
         if self.plot:
             plt.savefig(f"{PLOT_MLFLOW_ARTIFACTS}/plot_clusters-ruido.png")
@@ -178,15 +177,6 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
     def predict(self, X):
         return self.final_labels_
         
-#%% LOADING DATA FUNCTION
-def loading_table(path):
-    s3 = s3fs.S3FileSystem()
-    parquet_files = s3.glob(path)
-    df_posts = pd.DataFrame()
-    for file in parquet_files:
-        with s3.open(file) as f:
-            df_posts = pd.concat([df_posts, pd.read_parquet(f)])
-    return df_posts
 
 #%% JACCARD AND CLUSTER DISTANCE FUNCTIONS
 def get_jaccard(df):
@@ -242,19 +232,17 @@ def cleaning_similarity(X):
     return to_drop
 
 #%% LOADING DATA
-df_posts = loading_table(f"{GOLD_POSTS_PATH}/*/*.parquet")
-path_silver = f"{SILVER_POSTS_PATH}/*/*.parquet"
+df_posts = data_loader.load_posts()
 df_posts = pd.merge(
     df_posts,
-    loading_table(path_silver)[['SK_post','yaked']],
+    data_loader.load_posts("silver")[['SK_post','yaked']],
     on='SK_post',
     how='inner')
 
 X  = np.vstack(df_posts["embedding"].values)
 not_in_set = np.setdiff1d(np.arange(X.shape[0]), list(cleaning_similarity(X)))
-
-#%%
 X = X[not_in_set]
+
 # %% RUN PIPELINE
 pipeline = Pipeline([
     ("scaler", MinMaxScaler()),
