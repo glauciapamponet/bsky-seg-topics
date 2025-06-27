@@ -63,23 +63,23 @@ def plot_clusters(X, labels, title, axis):
 class TextClusterEnsemble(BaseEstimator, ClusterMixin):
     def __init__(self, n_jobs=6, plot=False, **final_params):
         self.plot = plot
-        self.it_per_model_ = 5
+        self.__it_per_model = 5
         self.n_jobs = n_jobs
-        self.labels_list_ = []
-        self.final_labels_ = []
-        self.co_matrix_ = None
-        self.valid_indices_ = None
-        self.model_params_ = {
+        self.__labels_list = []
+        self.__final_labels = []
+        self.__co_matrix = None
+        self.__valid_indices = None
+        self.__model_params = {
             HDBSCAN: dict(min_cluster_size=[80, 50, 80, 50, 30], 
                     min_samples=([80] * 2) + ([110] * 3), 
-                    metric= ['cosine'] * self.it_per_model_, 
-                    cluster_selection_method=['eom'] * self.it_per_model_,
-                    n_jobs=[6] * self.it_per_model_),
+                    metric= ['cosine'] * self.__it_per_model, 
+                    cluster_selection_method=['eom'] * self.__it_per_model,
+                    n_jobs=[6] * self.__it_per_model),
 
             DBSCAN: dict(eps=[2.4, 2.4, 2.5, 2.4, 2.5], 
                     min_samples=[50, 80, 80, 110, 140], 
-                    metric=['euclidean'] * self.it_per_model_, 
-                    n_jobs=[6] * self.it_per_model_),
+                    metric=['euclidean'] * self.__it_per_model, 
+                    n_jobs=[6] * self.__it_per_model),
 
             AgglomerativeClustering: dict(
                 metric=final_params.get('metric', 'precomputed'),
@@ -92,23 +92,23 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
         return self.plot
 
     def set_params(self, model, params):
-        self.model_params_[model] = params
+        self.__model_params[model] = params
 
     def get_params(self, model, iteration=None):
-        params = self.model_params_[model]
+        params = self.__model_params[model]
         if iteration is not None:
             return {p: params[p][iteration] for p in params.keys()}
 
         return params
     
     def get_matrix(self, normalized=False):
-        mtx = self.co_matrix_
+        mtx = self.__co_matrix
         return mtx if not normalized else mtx / mtx.max()
     
     def __create_matrix(self, size):
         cooc_matrix = np.zeros((size, size))
 
-        for labels in self.labels_list_:
+        for labels in self.__labels_list:
             for i in range(size):
                 for j in range(size):
                     if labels[i] != -1 and labels[j] != -1 and labels[i] == labels[j]:
@@ -116,21 +116,21 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
 
         np.fill_diagonal(cooc_matrix, 0)
         in_any_cluster = (cooc_matrix > 0).any(axis=1)
-        self.valid_indices_ = np.where(in_any_cluster)[0]
-        self.co_matrix_ = cooc_matrix[np.ix_(self.valid_indices_, self.valid_indices_)]
+        self.__valid_indices = np.where(in_any_cluster)[0]
+        self.__co_matrix = cooc_matrix[np.ix_(self.__valid_indices, self.__valid_indices)]
 
-        self.co_matrix_ /= len(self.labels_list_)
+        self.__co_matrix /= len(self.__labels_list)
 
 
     def __run_model(self, model, X, axes=None, text=None, final=None):
         if final is None:
             label = model.fit_predict(X)
-            self.labels_list_.append(label)
+            self.__labels_list.append(label)
         else:
             label = model.fit_predict((1 - self.get_matrix(True)))
-            self.final_labels_ = np.full(X.shape[0], -1)
-            self.final_labels_[self.valid_indices_] = label
-            label = self.final_labels_
+            self.__final_labels = np.full(X.shape[0], -1)
+            self.__final_labels[self.__valid_indices] = label
+            label = self.__final_labels
 
         if axes and text:
             mask = label != -1
@@ -143,8 +143,8 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
     def fit(self, X, y=None):
         text_list = [None, None, None]
         n_samples = X.shape[0]
-        n_it = self.it_per_model_
-        models = list(self.model_params_.keys())
+        n_it = self.__it_per_model
+        models = list(self.__model_params.keys())
 
         if self.plot:
             fig = plt.figure(figsize=(20, 5))
@@ -155,7 +155,7 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
             text_list = ["HDBSCAN", "DBSCAN"]
 
         for m in range(len(models)-1):
-            for i in range(self.it_per_model_):
+            for i in range(self.__it_per_model):
                 model = models[m](**self.get_params(models[m], iteration=i))
                 self.__run_model(model, X, axes[m][i], f"{text_list[m]}-{i+1}")
 
@@ -172,10 +172,10 @@ class TextClusterEnsemble(BaseEstimator, ClusterMixin):
     
     def fit_predict(self, X):
         self.fit(X)
-        return self.final_labels_
+        return self.__final_labels
     
     def predict(self, X):
-        return self.final_labels_
+        return self.__final_labels
         
 
 #%% JACCARD AND CLUSTER DISTANCE FUNCTIONS
