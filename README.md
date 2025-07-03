@@ -1,6 +1,6 @@
 # bsky-seg-topics
 
-O Bluesky é uma plataforma de rede social no formato microblog que surgiu em 2021, criada como prova de conceito para apresentar a ideia de rede social descentralizada, onde os perfis de usuários estão hospedados em servidores que não são necessariamente da empresa dona da rede social. Por ter um formato de uso extremamente parecido com o antigo Twitter, o Bluesky vem atraindo usuários de diferentes nacionalidades. Em janeiro de 2025, a plataforma atingiu os 30 milhões de usuários. O possível crescimento acaba marcando abertura a exploração de público dentro da rede social através de produtores de conteúdo, marcas e publicitários que, mesmo com a recusa do Bluesky na inserção de anúncios nativos, podem investir em comunicação e engajamento o público da rede.
+O Bluesky é uma plataforma de rede social no formato microblog que surgiu em 2021, criada como prova de conceito para apresentar a ideia de rede social descentralizada, onde os perfis de usuários estão hospedados em servidores que não são necessariamente da empresa dona da rede social. Por ter um formato de uso extremamente parecido com o antigo Twitter, o Bluesky vem atraindo usuários de diferentes nacionalidades. Em janeiro de 2025, a plataforma atingiu os 30 milhões de usuários. 
 
 ## Coleta de Dados
 O bluesky disponibiliza de forma aberta uma biblioteca para python atproto, que fornece interface de cliente para a API da rede social, através do AT Protocol. Com ela é possível realizar acesso a uma conta de usuário e realizar ações de leitura e escrita dentro do perfil, além de gerenciamento de perfil.
@@ -72,7 +72,54 @@ Já a avaliação de similaridade geral no terceiro gráfico indica melhor resul
 
 Na camada final do Ensemble é possivel observar que as métricas de avaliação interna e externa decaíram quando comparadas às das camadas internas do HDBSCAN, porém muito próximas às de DBSCAN.<br>
 Isso pode indicar que os registros que foram agrupados em DBSCAN mas não em HDBSCAN oferecem impacto o suficiente para que o clustering hierárquico tenda a uma performance mais próxima a DBSCAN. Uma evidência seria a comparação das métricas finais com as de DBSCAN, em que a variabilidade de dados sinaliza ser mais alta em comparação com as iterações HDBSCAN, enquanto os limites de clusters são menos marcados e a similaridade é menor do que em HDBSCAN.<br>
-A distância entre centróides dos dois clusters não conclui que estão em locais de completos opostos no espaço vetorial, mas é significativa o suficiente para permitir que exista distancia distinguível entre os grupos.
+A distância entre centróides dos dois clusters não conclui que estão em locais de completos opostos no espaço vetorial, mas é significativa o suficiente para permitir que exista distância distinguível entre os grupos.
 
 ## Resultados
+
+![Wordcloud dos Clusters Gerados](Assets/Analysis%20Images/wordcloud-clusters.png)
+
+Com os resultados dos clusters gerados é possível observar que existe distinção semantica bem demarcada entre o conjunto de palavras. Enquanto no cluster 1, fica evidente a carga generalista com enfase nos assuntos voltados ao feriado, mesmo sendo possivel observar tópicos que possivelmente gerariam subclusters, o cluster 2 carrrega caráter mais político e de atualidades, com foco nos tópicos que foram notícia dentro do período. A discrepância da variabilidade de palavras torna o cluster 2 mais definido em termos de semântica e assunto do que o cluster 1.
+
+A popularidade dos posts no dataset é analisada a partir dos parametros de interação, onde é possivel catalogar a interação ativa, onde os posts recebem comentários (Quotes e Replies) e a interação passiva, onde apenas uma reação simples é registrada (Likes e Reposts).
+Quando observada a popularidade (os índices de recepção e interação com os posts) dos tópicos de cada cluster, é possivel notar que, apesar da diferença na variabilidade de tópicos, o cluster 2 obteve mais interações do que o cluster 1.
+
+![Distribuição da Interação para cada Cluster](Assets/Analysis%20Images/boxplot-clusters.png)
+
+Os formatos de distribuição das interações (Likes, Reposts, Quotes e Respostas) de cada cluster mostram semelhanças, indicando a desproporção de popularidade para ambos os grupos(poucos posts alcançaram picos de popularidade, mesmo desconsiderando outliers máximos), mas ainda evidenciando que o cluster 2 obteve maior popularidade em seus assuntos do que o cluster 1.
+
+Uma vez que a distribuição de interações nos posts apresenta acentuada assimilaridade, olhando então do ponto de vista do valor mediano de interações, é possível observar o comportamento temporal de interações e recepção dos grupos a cada período de hora.
+
+![Interações a Cada Hora](Assets/Analysis%20Images/interacoes-hora.png)
+
+Aqui fica evidente que os tópicos do cluster 2 apresenta maior oscilação de interação, além de carregar uma média geral para cada tipo de interação levemente maior que a dos tópicos no cluster 1. Em relação a horário notáveis, o cluster um teve maior estabilidade nas quantidades medianas de reação enquanto o cluster 2 apresentou picos de atividade na madrugada e no início da tarde, encontrados em todos os tipos de interações.
+
+No contexto dos tópicos mais citados dentro de cada agrupamento, o resultado dos 5 tópicos de cada cluster mostra que ambos tem muito em torno do mesmo assunto. Replicando a estrutura do dataset geral, as palavras mais pontuadas representam pouco em relação a todo o vocabulário encontrado em cada um dos grupos, principalmente no Cluster 1, em que o carater generalista é mais forte, a quantidade de posts é maior e apresenta variabilidade de assuntos. 
+
+![Tópicos Mais Citados](Assets/Analysis%20Images/cobertura-topicos.png)
+
+Em relação aos parâmetros de interação, fica claro a diferença escalar entre a interação passiva e a interação ativa, evidenciando a alta em Likes. No cluster 2 a interação ativa apresenta aumento consideravel em comparação ao cluster 1, principalmente em Quotes. Em geral, dentro de suas proporções as quatro métricas apresentam pouca variação para os tópicos, reforçando a ideia da participação deles nos mesmos assuntos.
+
+Analisando os dados em relação à autoralidade dos posts, fica evidente uma separação de estilo de conteúdo que segue a linha temática dos clusters.
+
+![Presença de Autores](Assets/Analysis%20Images/presença-top-10.png)
+
+A lista de contas mais ativas dentro do universo dos clusters segmentados mostra que o cluster 2, por seu caráter político e de atualidades, apresenta autores focados em informação. Já o gênero de conteúdo dos autores mais ativos no cluster 1 espelha a categoria de variedades, sendo essas contas pessoais ou de conteúdo de entretenimento. A presença de posts em cada cluster para o conjunto de autores mostra também que, apesar de produzir conteúdo direcionado, os autores dos posts no cluster 2 podem produzir conteúdo generalista e vice-versa, sendo para esse cluster uma proporção maior do que para o cluster 1.
+
+Pela ótica da interação mais expressiva, a interação passiva de Likes, os autores encontrados em ambos os clusters não integram os autores mais ativos, tendo contabilizado poucos posts no agrupamento dentro do período.
+
+![Tópicos e Likes - C1](Assets/Analysis%20Images/top-author-0.png)
+
+Os 5 autores mais populares em recepção de Likes dentro do grupo 1 compartilham vocabulário relacionado ao feriado, com esceção do segundo mais popular, que apresenta conteúdo generalista. A presença de contas de celebridades no conjunto ajuda a entender a alta popularidade nos posts.
+
+![Tópicos e Likes - C2](Assets/Analysis%20Images/top-author-1.png)
+O grupo 2 reforça o caráter informativo quando observado o vocabulário dos autores mais populares. Há a presença de autor de intersecção (autores que postaram em tópicos de ambos os grupos). Como no grupo 1, aqui é perceptivel a enfase em um assunto de evidência no período da coleta.
+
+## Considerações
+Apesar de bem demarcado, o processo de coleta, agrupamento e exploração apresentou desafios que podem evidenciar melhoras em desenvolvimentos futuros:<br>
+
+- **Segmentação de Coleta:** por apresentar alta variabilidade de assuntos dentro do Feed fornecido pela API do Bluesky, o conjunto de dados pode apresentar extrema distinção semântica, exigindo maior tratamento na vetorização ou dificultando o clustering pelo diagnóstico de muitos ruidos. Isso pode ser um ponto de interferência principalmente quando se considera marcos temporais, como no caso desse projeto (período de festas)
+- **Processamento de Linguagem Natural:** a extração de contaúdo chave é oportuno dentro da separação de tokens no conjunto de texto no momento da limpeza. Entretanto é importante explorar o limiar de importância das palavras chave ao extrair, ou corre-se o risco de prejudicar a semântica do texto.
+- **Plataforma de Orquestração:** o uso de ambiente para orquestrar o pipeline de coleta deve ser escolhido com cuidado e o uso consciente, se depender de custos financeiros.
+
+
 
