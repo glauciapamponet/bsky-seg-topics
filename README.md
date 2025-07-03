@@ -117,8 +117,9 @@ O grupo 2 reforça o caráter informativo quando observado o vocabulário dos au
 ## Considerações
 Apesar de bem demarcado, o processo de coleta, agrupamento e exploração apresentou desafios que podem evidenciar melhoras em desenvolvimentos futuros:<br>
 
-- **Segmentação de Coleta:** por apresentar alta variabilidade de assuntos dentro do Feed fornecido pela API do Bluesky, o conjunto de dados pode apresentar extrema distinção semântica, exigindo maior tratamento na vetorização ou dificultando o clustering pelo diagnóstico de muitos ruidos. Isso pode ser um ponto de interferência principalmente quando se considera marcos temporais, como no caso desse projeto (período de festas)
-- **Processamento de Linguagem Natural:** a extração de contaúdo chave é oportuno dentro da separação de tokens no conjunto de texto no momento da limpeza. Entretanto é importante explorar o limiar de importância das palavras chave ao extrair, ou corre-se o risco de prejudicar a semântica do texto.
+- **Segmentação de Coleta:** por apresentar alta variabilidade de assuntos dentro do Feed fornecido pela API do Bluesky, o conjunto de dados pode apresentar extrema distinção semântica, exigindo maior tratamento na vetorização ou dificultando o clustering pelo diagnóstico de muitos ruidos. Isso pode ser um ponto de interferência, principalmente quando se considera marcos temporais, como no caso desse projeto (período de festas). Desse modo, a segmentação por assunto chave pode direcionar a busca e produzir um conjunto de maior qualidade para segmentação.
+- **Processamento de Linguagem Natural:** a extração de conteúdo chave é oportuno dentro da separação de tokens no conjunto de texto no momento da limpeza. Entretanto, é importante explorar o limiar de importância das palavras chave ao extrair, ou corre-se o risco de prejudicar a semântica do texto.
+- **Visualização de Grupos:** sendo um dado não estruturado que apresenta centenas de dimensões, os embeddings limitam a visualização de dados. A redução de dimensionalidade pode não ser uma opção pela perda de explicabilidade dos dados no prodesso de redução, o que obriga a formas de "visualização" alternativas do conjunto de grupos.
 - **Plataforma de Orquestração:** o uso de ambiente para orquestrar o pipeline de coleta deve ser escolhido com cuidado e o uso consciente, se depender de custos financeiros.
 
 
