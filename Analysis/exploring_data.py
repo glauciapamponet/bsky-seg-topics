@@ -1,5 +1,4 @@
 #%%
-import s3fs
 import squarify
 import pandas as pd
 import seaborn as sn
@@ -8,26 +7,14 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from itertools import combinations
 from wordcloud import WordCloud
-from pandasgui import show
+
+from Assets.Code import LoadingData
 
 from collections import Counter
 
-BUCKET_PATH = "s3://bsky-posts-lake"
-SILVER_POSTS_PATH = f"{BUCKET_PATH}/silver/fato/posts"
-SILVER_TIME_PATH = f"{BUCKET_PATH}/silver/dim/time"
-SILVER_AUTHOR_PATH = f"{BUCKET_PATH}/silver/dim/author"
-
-s3 = s3fs.S3FileSystem()
+data_loader = LoadingData.LoadingData()
 
 #%%
-def loading_table(path):
-    parquet_files = s3.glob(path)
-    df = pd.DataFrame()
-    for file in parquet_files:
-        with s3.open(file) as f:
-            df = pd.concat([df, pd.read_parquet(f)])
-
-    return df
 
 def plot_wordcloud(data, title, axes=None):
     all_text = " ".join(data.astype(str).tolist())
@@ -41,15 +28,14 @@ def plot_wordcloud(data, title, axes=None):
 
     axes = plt if not axes else axes
 
-    # plt.figure(figsize=(12, 6))
     axes.imshow(wordcloud, interpolation='bilinear')
     axes.axis("off")
     axes.set_title(title)
 
 #%%
-df_posts = loading_table(f"{SILVER_POSTS_PATH}/*/*.parquet")
-df_author = loading_table(f"{SILVER_AUTHOR_PATH}/*.parquet")
-df_time = loading_table(f"{SILVER_TIME_PATH}/*.parquet")
+df_posts = data_loader.load_posts("silver")
+df_author = data_loader.load_posts("silver")
+df_time = data_loader.load_posts("silver")
 
 #%%
 df_join = pd.merge(
@@ -105,6 +91,7 @@ plot_temporal(hour_count, 'HORA', axes[2], 'salmon', labels)
 plt.show()
 
 #%%
+# Analise da Correlação de tópicos e Cobertura de Posts
 
 df_split = df_posts.copy()
 df_split['splitted'] = df_split['yaked'].apply(lambda x: x.split(" "))
@@ -135,7 +122,6 @@ def data_coorelation(df):
 
     return sizes, G
 
-#%%
 sizes, G = data_coorelation(df_split)
 
 fig = plt.figure(figsize=(18, 10))
